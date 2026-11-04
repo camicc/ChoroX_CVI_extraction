@@ -4,6 +4,35 @@ Code accompanying work on the genetic architecture of choroidal vascularity usin
 
 > **Pre-submission status.** The algorithm was reorganized from three supplied scripts (`main.py`, `helper.py`, `svg_util.py`). The numerical extraction steps have been retained, but the defaults supplied with `main.py` have **not** been verified as the final production parameters for either cohort. Do not cite this as a complete reproduction of the paper until the checks in [docs/reproducibility_checklist.md](docs/reproducibility_checklist.md) are completed.
 
+## Core API: one OCT volume
+
+The intended public interface is `extract_cvi`: one call takes five central grayscale B-scans and their five matching parsed SVG segmentations. It does not depend on participant identifiers or dataset-specific directory structures.
+
+```python
+from choroid_cvi import extract_cvi
+
+result = extract_cvi(
+    oct_bscans,                 # five 2-D grayscale NumPy arrays
+    choroid_segmentations,     # five corresponding SVG XML elements
+    spacings=[1, 1, 0.01, 0.01],  # optional; last two are mm/pixel
+)
+print(result.cvi_mean, result.cvi_spatial_sd)
+```
+
+`spacings` is optional if only CVI is needed; including it also produces `result.pachy_area_mm2`. The example spacing values above are illustrative **synthetic** values, not calibrated scan metadata. In real analyses, use the scanner-exported spacing. Use `parameters={...}` to override the documented vessel segmentation defaults where justified.
+
+The dataset-level interface `extract_cvi_from_folders(cube_dir, seg_dir)` simply loads the original JPEG/SVG export convention and calls `extract_cvi`. The CLI supports single samples and cohorts by calling the same API.
+
+### Run the synthetic example
+
+The repository includes **five artificial JPEG B-scans, five matching SVG masks, and `info.json` metadata** under `examples/synthetic_case/`. These are programmatically generated illustrations, not clinical images.
+
+```bash
+python examples/run_single_volume.py
+```
+
+The script prints both CVI phenotypes and the area estimate. You may regenerate the example deterministically using `python examples/make_synthetic_example.py`. Numerical reference tests for the phenotype reduction logic are in `tests/`; compare the *full* synthetic example output after validating the rendering environment and final method parameters.
+
 ## What it computes
 
 1. Select five central OCT B-scans and their corresponding SVG choroid segmentations.
@@ -60,7 +89,7 @@ choroid-cvi --cube-dir data/example_001/oct_volume \
   --sample-id example_001 --output results/phenotypes.csv
 ```
 
-For a cohort, create a CSV with `sample_id,cube_dir,seg_dir` (see [example manifest](examples/manifest.example.csv)). Relative paths in a manifest are relative to its directory:
+For a cohort, create a CSV with `sample_id,cube_dir,seg_dir` (see [example manifest](examples/manifest.example.csv), which points to the included synthetic case). Relative paths in a manifest are relative to its directory:
 
 ```bash
 choroid-cvi --manifest examples/manifest.example.csv \
@@ -74,7 +103,7 @@ The results include `sample_id`, `n_bscans`, `cvi_mean`, `cvi_spatial_sd`, `pach
 
 | Original | Here | Change |
 | --- | --- | --- |
-| `main.py` | `src/choroid_cvi/cli.py` | Replaced hard-coded paths with CLI and manifest processing; added validation and provenance |
+| `main.py` | `src/choroid_cvi/api.py` and `cli.py` | Added a reusable single-volume API and made dataset batching a convenience wrapper |
 | `helper.py` | `src/choroid_cvi/processing.py` | Retained extraction calculations; removed unused imports and an unused asynchronous JSON reader |
 | `svg_util.py` | `svglib==1.4.1` dependency | Avoids distributing an incomplete third-party module with unresolved relative imports; retains its renderer API |
 

@@ -6,37 +6,13 @@ import argparse
 import csv
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
-import inspect
 import json
 from pathlib import Path
 import platform
 import sys
 
-import numpy as np
-
 from . import __version__
-from .processing import (
-    calculate_cvi,
-    calculate_pachy_area,
-    segment_oct,
-    select_central_oct_slices,
-)
-
-
-# These are the parameters in the supplied main.py, not independently
-# verified as the final UK Biobank or OphtalmoLaus production settings.
-DEFAULT_PARAMETERS = {
-    "kernel_size_o_pachy": 17,
-    "kernel_size_c_pachy": 5,
-    "block_size_pachy": 91,
-    "cst_sub_mean_pachy": 13,
-    "kernel_size_o": 5,
-    "block_size": 41,
-    "cst_sub_mean": 16,
-    "kernel_size_o_small": 5,
-    "pachy_only": False,
-    "medium_only": False,
-}
+from .api import extract_cvi_from_folders, resolve_parameters
 
 OUTPUT_COLUMNS = (
     "sample_id", "n_bscans", "cvi_mean", "cvi_spatial_sd",
@@ -45,34 +21,8 @@ OUTPUT_COLUMNS = (
 
 
 def load_parameters(path: Path | None) -> dict:
-    params = DEFAULT_PARAMETERS.copy()
-    if path is not None:
-        overrides = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(overrides, dict):
-            raise ValueError("Parameter JSON must contain an object")
-        unknown = set(overrides) - set(params)
-        if unknown:
-            raise ValueError(f"Unknown segmentation parameters: {sorted(unknown)}")
-        params.update(overrides)
-
-    for key in (
-        "kernel_size_o_pachy", "kernel_size_c_pachy", "block_size_pachy",
-        "kernel_size_o", "block_size", "kernel_size_o_small",
-    ):
-        value = params[key]
-        if type(value) is not int or value < 3 or value % 2 == 0:
-            raise ValueError(f"{key} must be an odd integer >= 3")
-    for key in ("cst_sub_mean_pachy", "cst_sub_mean"):
-        if type(params[key]) not in (int, float):
-            raise ValueError(f"{key} must be numeric")
-    if params["pachy_only"] is not False or params["medium_only"] is not False:
-        raise ValueError("Both *_only options must be false for the combined CVI phenotype")
-
-    # Protect against changing the algorithm via a future signature mismatch.
-    accepted = set(inspect.signature(segment_oct).parameters)
-    if set(params) - accepted:
-        raise ValueError("Parameters do not match segment_oct signature")
-    return params
+    overrides = json.loads(path.read_text(encoding="utf-8")) if path is not None else None
+    return resolve_parameters(overrides)
 
 
 def extract_one(sample_id: str, cube_dir: Path, seg_dir: Path, params: dict) -> dict:
@@ -80,43 +30,10 @@ def extract_one(sample_id: str, cube_dir: Path, seg_dir: Path, params: dict) -> 
     row = dict.fromkeys(OUTPUT_COLUMNS)
     row.update(sample_id=sample_id, n_bscans=0, status="error", error="")
     try:
-        if not cube_dir.is_dir() or not seg_dir.is_dir():
-            raise ValueError("OCT or segmentation directory does not exist")
-
-        images = sorted(cube_dir.glob("*.jpg"))
-        if len(images) < 5:
-            raise ValueError(f"Expected at least 5 JPEG B-scans, found {len(images)}")
-        mid_start = (len(images) - 5) // 2
-        expected = [f"{i:04d}" for i in range(mid_start, mid_start + 5)]
-        missing = [stem for stem in expected if not (
-            (cube_dir / f"{stem}.jpg").is_file()
-            and (seg_dir / f"{stem}.svg").is_file()
-        )]
-        if missing:
-            raise ValueError(f"Missing central JPEG/SVG pairs: {', '.join(missing)}")
-
-        octs, svgs = select_central_oct_slices(cube_dir, seg_dir, nb_slices=5)
-        row["n_bscans"] = len(octs)
-        if len(octs) != 5 or any(np.asarray(scan).ndim != 2 for scan in octs):
-            raise ValueError("Expected exactly 5 grayscale OCT B-scans")
-
-        info_file = cube_dir / "info.json"
-        if not info_file.is_file():
-            raise ValueError("Missing OCT metadata info.json (needed for pachy area)")
-        info = json.loads(info_file.read_text(encoding="utf-8"))
-        spacings = info.get("spacing")
-        if not isinstance(spacings, list) or len(spacings) < 4:
-            raise ValueError("info.json requires spacing array of at least four elements")
-        if not all(np.isfinite(float(v)) and float(v) > 0 for v in (spacings[2], spacings[3])):
-            raise ValueError("Spacing indices 2 and 3 must be positive finite values")
-
-        vessels, masks = segment_oct(oct_cube=octs, oct_seg=svgs, **params)
-        cvi_mean, cvi_sd = calculate_cvi(vessels, masks)
-        pachy_area = calculate_pachy_area(vessels, spacings=spacings)
-        if cvi_mean is None or cvi_sd is None or not np.isfinite([cvi_mean, cvi_sd]).all():
-            raise ValueError("CVI is undefined or non-finite")
-        row.update(cvi_mean=float(cvi_mean), cvi_spatial_sd=float(cvi_sd),
-                   pachy_area_mm2=None if pachy_area is None else float(pachy_area),
+        result = extract_cvi_from_folders(cube_dir, seg_dir, parameters=params)
+        row.update(n_bscans=5, cvi_mean=result.cvi_mean,
+                   cvi_spatial_sd=result.cvi_spatial_sd,
+                   pachy_area_mm2=result.pachy_area_mm2,
                    status="ok")
     except Exception as exc:
         row["error"] = f"{type(exc).__name__}: {exc}"

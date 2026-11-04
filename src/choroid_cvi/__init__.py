@@ -1,4 +1,8 @@
 """OCT-derived choroidal vascularity phenotype extraction."""
 
-__version__ = "0.1.0"
+from .api import CVIResult, extract_cvi, extract_cvi_from_folders
+
+__all__ = ["CVIResult", "extract_cvi", "extract_cvi_from_folders"]
+
+__version__ = "0.2.0"
 

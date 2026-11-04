@@ -5,7 +5,8 @@
 - [ ] Confirm the SVG mask provenance, upstream choroid model, software/weights availability, and relevant restrictions.
 - [ ] Verify per-column CVI formula, handling of missing-mask columns, B-scan aggregation, units, and correspondence with manuscript equations.
 - [ ] Compare output against archived production phenotypes for at least a small, authorized test subset; document numeric tolerance.
-- [ ] Add one distributable synthetic OCT+SVG example with known outputs, after validating the SVG rasterization path.
+- [x] Add a distributable synthetic five-B-scan OCT+SVG example and a single-volume usage script.
+- [ ] Validate the complete synthetic example and record trusted reference numbers after SVG rasterization is verified in the final environment.
 - [ ] Freeze the exact dependency environment; run tests in a fresh environment and record a successful end-to-end example.
 - [ ] Add the actual GWAS, QC, LD clumping, heritability, gene-based analysis, functional annotation, eQTL/coloc, MR and external replication workflows—or point to versioned, accessible companion repositories.
 - [ ] Publish sample inclusion/QC logic, input data schemas and source-access instructions without disclosing sensitive data.
