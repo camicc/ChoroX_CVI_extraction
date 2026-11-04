@@ -1,0 +1,4 @@
+sample_id,cube_dir,seg_dir
+example_001,../data/example_001/oct_volume,../data/example_001/svg_segmentation
+example_002,../data/example_002/oct_volume,../data/example_002/svg_segmentation
+
