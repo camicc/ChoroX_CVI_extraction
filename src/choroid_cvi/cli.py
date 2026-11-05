@@ -11,6 +11,8 @@ from pathlib import Path
 import platform
 import sys
 
+import cv2
+
 from . import __version__
 from .api import extract_cvi_from_folders, resolve_parameters
 
@@ -26,7 +28,7 @@ def load_parameters(path: Path | None) -> dict:
 
 
 def extract_one(sample_id: str, cube_dir: Path, seg_dir: Path, params: dict) -> dict:
-    """Preserve the supplied segmentation and summary calculations."""
+    """Run one volume and record success or an actionable error."""
     row = dict.fromkeys(OUTPUT_COLUMNS)
     row.update(sample_id=sample_id, n_bscans=0, status="error", error="")
     try:
@@ -101,8 +103,9 @@ def main(argv: list[str] | None = None) -> int:
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "pipeline_version": __version__,
         "python": platform.python_version(),
+        "opencv_cv2": cv2.__version__,
         "dependencies": {name: _package_version(name) for name in (
-            "numpy", "scipy", "opencv-python-headless", "Pillow", "lxml",
+            "numpy", "scipy", "Pillow", "lxml",
             "svglib", "reportlab", "rlPyCairo",
         )},
         "central_bscans": 5,

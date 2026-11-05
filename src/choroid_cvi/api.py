@@ -1,8 +1,7 @@
 """Public single-volume API for OCT-derived CVI phenotypes.
 
-The image processing and numerical reductions are delegated unchanged to
-``processing.py``. A volume here means five grayscale central B-scans with
-five matching, parsed SVG layer segmentations.
+A volume here means five grayscale central B-scans with five corresponding
+parsed SVG layer segmentations.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ from .processing import (
 )
 
 
-# Taken from the submitted main.py, not verified as final cohort-specific values.
+# Vessel segmentation settings; override as appropriate for acquisition conditions.
 DEFAULT_PARAMETERS = {
     "kernel_size_o_pachy": 17,
     "kernel_size_c_pachy": 5,
@@ -41,7 +40,7 @@ DEFAULT_PARAMETERS = {
 
 @dataclass(frozen=True)
 class CVIResult:
-    """Median-over-B-scan phenotypes from the supplied algorithm."""
+    """Median-over-B-scan CVI mean, spatial SD, and optional vessel area."""
 
     cvi_mean: float
     cvi_spatial_sd: float
@@ -85,8 +84,8 @@ def extract_cvi(
     """Extract CVI from exactly five *central* grayscale B-scans and SVGs.
 
     ``oct_bscans`` and ``choroid_segmentations`` must already be aligned and
-    ordered. The provided processing algorithm is not changed. The SD is the
-    median of the five within-B-scan SDs of column-wise CVI, not a pooled SD.
+    ordered. The SD is the median of the five within-B-scan SDs of column-wise
+    CVI, not a pooled SD.
     If spacings are supplied, indices 2 and 3 must be positive mm/pixel.
     """
     if len(oct_bscans) != 5 or len(choroid_segmentations) != 5:
@@ -140,7 +139,7 @@ def extract_cvi_from_folders(
     *,
     parameters: dict | None = None,
 ) -> CVIResult:
-    """Convenience adapter for the original directory export convention."""
+    """Read a JPEG/SVG OCT export and extract the CVI phenotypes."""
     bscans, svgs = load_volume_folders(cube_dir, seg_dir)
     info_file = Path(cube_dir) / "info.json"
     if not info_file.is_file():
