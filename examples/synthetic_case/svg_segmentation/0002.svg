@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="white" />
-  <g>
-    <path class="layer layer-6" d="M 0 300 L 512 300 L 512 390 L 0 390 Z" fill="black" />
-  </g>
-</svg>
