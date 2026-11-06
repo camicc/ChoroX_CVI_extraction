@@ -1,4 +1,4 @@
-# ChoroX — Choroidal vascularity from OCT
+# ChoroX: Choroidal vascularity from OCT
 
 Automated extraction of choroidal vascularity index (CVI) phenotypes from macular optical coherence tomography (OCT) volumes. This repository contains the image-processing component of the workflow described in:
 
@@ -106,9 +106,17 @@ where the numerator and denominator are the vessel and choroidal-mask pixel coun
 For each B-scan, the mean and standard deviation are computed **across columns**. The final volume-level phenotypes are the medians of those five per-scan statistics:
 
 $$
-\mathrm{CVI}_{\mathrm{mean}} = \operatorname{median}_i\!\left[\operatorname{mean}_x\mathrm{CVI}_i(x)\right],
-\qquad
-\mathrm{CVI}_{\mathrm{spatial\ SD}} = \operatorname{median}_i\!\left[\operatorname{SD}_x\mathrm{CVI}_i(x)\right].
+\mathrm{CVI}_{\mathrm{mean}} =
+\mathrm{median}_i \left[
+\mathrm{mean}_x \, \mathrm{CVI}_i(x)
+\right]
+$$
+
+$$
+\mathrm{CVI}_{\mathrm{spatial\ SD}} =
+\mathrm{median}_i \left[
+\mathrm{SD}_x \, \mathrm{CVI}_i(x)
+\right]
 $$
 
 **CVI spatial variability is not the standard deviation of CVI means between B-scans.** It measures the horizontal variation within each B-scan, followed by median aggregation across the five central scans.
