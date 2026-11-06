@@ -4,7 +4,7 @@ Automated extraction of choroidal vascularity index (CVI) phenotypes from macula
 
 **Pittet C, et al.** *Genetic Architecture of Choroidal Vascularity Revealed by Population-scale Retinal Imaging*. Research Square, 2026. [https://doi.org/10.21203/rs.3.rs-8842359/v1](https://doi.org/10.21203/rs.3.rs-8842359/v1)
 
-![ChoroX CVI extraction workflow](src/workflow.png)
+![ChoroX CVI extraction workflow](src/Workflow.png)
 
 ## Overview
 
