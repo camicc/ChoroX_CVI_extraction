@@ -1,143 +1,128 @@
-# ChoroX: OCT-derived choroidal vascularity extraction
+# ChoroX — Choroidal vascularity from OCT
 
-Python code for extracting choroidal vascularity index (CVI) phenotypes from macular optical coherence tomography (OCT). The code accompanies research on the genetic architecture of choroidal vascularity in the **UK Biobank**, with external evaluation in **OphtalmoLaus**.
+Automated extraction of choroidal vascularity index (CVI) phenotypes from macular optical coherence tomography (OCT) volumes. This repository contains the image-processing component of the workflow described in:
 
-**What you provide:** one OCT volume exported as ordered grayscale B-scans, together with matching SVG choroid-layer masks. **What you obtain:** CVI mean and CVI spatial variability for that volume, plus an optional vessel-area measurement. A reproducible synthetic example is included; no clinical images or participant-level data are distributed.
+**Pittet C, et al.** *Genetic Architecture of Choroidal Vascularity Revealed by Population-scale Retinal Imaging*. Research Square, 2026. [https://doi.org/10.21203/rs.3.rs-8842359/v1](https://doi.org/10.21203/rs.3.rs-8842359/v1)
 
-![CVI extraction schematic, using synthetic illustration and the correct choroidal-area denominator](docs/figures/cvi_pipeline.svg)
+![ChoroX CVI extraction workflow](workflow.png)
 
-<sub>Schematic of the extraction described in the manuscript (Fig. 3). The choroidal layer masks are inputs to this repository; the upstream AI-based retinal layer segmentation model is not included. Diagram is illustrative, not clinical imaging.</sub>
+## Overview
 
-## Quick start: Conda or Mamba
+The pipeline uses OCT B-scans and their retinal/choroidal layer segmentations to derive two complementary phenotypes:
 
-Run these commands in the repository root. On Windows, **Anaconda Prompt** is the simplest option; Git Bash and PowerShell also work when Conda/Mamba shell initialization is configured.
+- **CVI mean:** average choroidal vascular proportion across the B-scan width.
+- **CVI spatial variability:** variation in vascular proportion across the B-scan width.
 
-```bash
-# Choose ONE environment creation command:
-mamba env create -f environment.yml
-# or: conda env create -f environment.yml
-# or: micromamba create -f environment.yml
+The extraction procedure comprises:
 
-conda activate choroid-cvi
-python -m pip install --no-build-isolation --no-deps -e .
+1. Select the five central B-scans from a macular OCT volume.
+2. Identify the choroid using the segmentation of the choriocapillaris and choroidal stroma (`CC_CS`) and align B-scans to Bruch's membrane.
+3. Apply denoising, depth-dependent intensity equalization, and contrast enhancement.
+4. Segment larger and smaller choroidal vessels using adaptive thresholds and morphological filtering.
+5. Calculate column-wise CVI and aggregate the resulting statistics across B-scans.
 
-# Try the complete five-B-scan synthetic example:
-python examples/run_single_volume.py
+The code in this repository focuses on **image processing and phenotype extraction**. The downstream genome-wide association and other genetic analyses reported in the paper are not part of this extraction script.
 
-# Check the calculations and input validation:
-python -m unittest discover -s tests -v
+## Requirements
+
+- Python 3.11 (tested on Windows with Conda)
+- NumPy, SciPy, Pillow, Matplotlib, lxml, and svglib
+- OpenCV
+- ReportLab and a compatible bitmap-rendering backend for rasterizing SVG segmentations
+
+One compatible installation, based on the Windows `cvi-repro` environment, is:
+
+```powershell
+conda create -n cvi-repro python=3.11 -y
+conda activate cvi-repro
+python -m pip install numpy scipy Pillow matplotlib lxml "svglib>=1.5,<2" "opencv-python-headless==5.0.0.93" "reportlab==4.5.1" "rl-renderPM==4.0.3"
 ```
 
-The environment uses Python 3.11 and Conda-forge for the scientific and SVG-rendering dependencies, including Cairo. `python -m pip install --no-build-isolation --no-deps -e .` registers this repository's importable package and `choroid-cvi` command without fetching dependencies from PyPI. If you used Micromamba instead of Conda, run `micromamba activate choroid-cvi` after initializing its shell.
-
-If `conda activate` is not recognized in Git Bash, run `conda init bash` once and reopen Git Bash, or use Anaconda Prompt.
-
-The synthetic run loads five generated grayscale images, five SVG masks and an `info.json` file. You can recreate these files at any time with `python examples/make_synthetic_example.py`. They are designed to demonstrate I/O, not to represent real choroidal morphology or establish clinical accuracy.
-
-## Use on one OCT volume
-
-Each OCT volume is treated independently. The method selects the **five central B-scans**; a single B-scan alone does not reproduce the eye-level phenotypes in the manuscript.
-
-For an exported folder with the documented naming convention:
-
-```text
-my_study/
-  oct_volume/
-    info.json
-    0000.jpg
-    0001.jpg
-    ...           # all B-scans in acquisition order
-  svg_segmentation/
-    0000.svg
-    0001.svg
-    ...           # one matching mask per B-scan
-```
-
-```bash
-choroid-cvi --cube-dir my_study/oct_volume \
-            --seg-dir my_study/svg_segmentation \
-            --sample-id example_001 \
-            --output results/phenotypes.csv
-```
-
-Or call the array-based Python interface directly, after loading five aligned grayscale B-scans and their corresponding parsed SVG segmentations:
+**Rendering note:** ReportLab 5 no longer supports the legacy `_renderPM` backend. With the versions above, select that backend in `src/processing.py` before rasterizing an SVG:
 
 ```python
-from choroid_cvi import extract_cvi
-
-result = extract_cvi(
-    oct_bscans,              # five ordered 2-D grayscale arrays
-    choroid_segmentations,  # five corresponding parsed SVG XML elements
-    spacings=scan_spacing,  # optional, needed for vessel area in mm²
-)
-print(result.cvi_mean)
-print(result.cvi_spatial_sd)
+from reportlab import rl_config
+rl_config.renderPMBackend = "_renderPM"
 ```
 
-For a complete working Python script, see [examples/run_single_volume.py](examples/run_single_volume.py).
+For reproducibility, record the complete package versions used for the final analysis. In particular, changes to the SVG renderer or OpenCV may affect pixel-level segmentations.
 
-### Input requirements
+## Input data
 
-- The source export contains consecutively numbered `0000.jpg`, `0001.jpg`, … images in B-scan acquisition order, and SVG masks with the same stems.
-- Each SVG identifies the choroid region with the class `layer layer-6` (`CC_CS`).
-- The selected five B-scans must have identical image dimensions and grayscale intensity.
-- `info.json` includes `"spacing": [...]` with the physical pixel spacings in **mm/pixel** at indices 2 and 3 for the optional area calculation. The folder-based CLI expects this file.
-- The preprocessing uses a fixed Bruch's-membrane alignment target and crop window; scan geometry and segmentation quality should be checked before applying it to a new OCT device.
-- This repository processes exported B-scans and existing masks. Generation of the choroid masks by an upstream AI segmentation model, and study-level quality control, are separate steps.
+The command-line script processes one OCT volume at a time. The directory passed to `--root` must contain:
 
-In the manuscript, the UK Biobank acquisition contains 128 B-scans per OCT volume; the OphtalmoLaus acquisition contains 256. The algorithm reduces either volume to its five central B-scans. Device-specific vessel-segmentation thresholds can be supplied with `--parameters`; see [example parameters](examples/segmentation_parameters.example.json).
-
-## Compute phenotypes
-
-After Bruch's membrane alignment, three-dimensional denoising and depth-intensity normalization, the pipeline combines large- and smaller-vessel masks obtained through adaptive thresholding and morphological processing.
-
-For B-scan `j` and lateral column `x`:
-
-$$
-\mathrm{CVI}_j(x)=\frac{\text{segmented vessel pixels in column }x}{\text{choroid-mask pixels in column }x}.
-$$
-
-Within each B-scan, compute the mean and population standard deviation of these column-wise values. The two volume-level phenotypes are the **medians of those five per-B-scan summaries**:
-
-$$
-\mathrm{CVI}_{\mathrm{mean}}=\operatorname{median}_j\bigl(\operatorname{mean}_x\mathrm{CVI}_j(x)\bigr)
-$$
-
-$$
-\mathrm{CVI}_{\mathrm{spatial\ variability}}=\operatorname{median}_j\bigl(\operatorname{SD}_x\mathrm{CVI}_j(x)\bigr).
-$$
-
-The second phenotype measures *lateral heterogeneity within a B-scan*, not the standard deviation over an entire pooled OCT volume. In the implementation, columns with no choroid-mask pixels are assigned CVI = 0 before the mean and SD are calculated; this assumption is documented for reproducibility.
-
-The optional `pachy_area_mm2` output estimates the median area of the largest connected segmented vessel region per B-scan, using the OCT image pixel spacings. It is not a GWAS outcome described in this repository.
-
-Full method details and acquisition assumptions: [docs/methods_and_assumptions.md](docs/methods_and_assumptions.md).
-
-## Process a dataset
-
-Users can independently loop over OCT studies, or provide a manifest CSV with columns `sample_id,cube_dir,seg_dir`. See [examples/manifest.example.csv](examples/manifest.example.csv):
-
-```bash
-choroid-cvi --manifest examples/manifest.example.csv \
-            --parameters examples/segmentation_parameters.example.json \
-            --output results/phenotypes.csv
+```text
+volume/
+├── oct/
+│   ├── info.json
+│   ├── 0000.jpg
+│   ├── ...
+│   └── 0127.jpg
+└── segmentation/
+    ├── 0000.svg
+    ├── ...
+    └── 0127.svg
 ```
 
-Each output row contains `sample_id`, `n_bscans`, `cvi_mean`, `cvi_spatial_sd`, `pachy_area_mm2`, `status`, and `error`. A neighboring `.run.json` file records the execution time, dependencies, and segmentation settings. Processing continues past a failed study, marking that row as an error; the command returns a nonzero exit code if any study failed.
+`info.json` provides image spacing under the `spacing` key. The SVGs must contain the segmentation layers expected by the extraction code, including `CC_CS`. The example follows the 128-B-scan OCT layout used for the original workflow; other acquisition geometries require validation of slice selection, cropping, and spacing.
 
-The manifest and batch CLI are conveniences, not requirements for integrating the core method in another imaging pipeline.
+Raw OCT images and their segmentations are **not distributed** with this repository. Use data for which you have the necessary access permissions.
 
-## Relationship to the GWAS
+## Run the extraction
 
-The extraction outputs form the imaging phenotypes for downstream genetic analysis. The paper additionally analyzes phenotype quality control and transformation, BGENIE GWAS, LD clumping, SNP heritability and genetic correlation, gene/pathway enrichment, regulatory mapping, Mendelian randomization, and external genetic replication.
+From the repository root, with `cvi-repro` activated:
 
-**This repository currently implements OCT-to-phenotype extraction.** It does not purport to run those genetic analyses. The [GWAS reproducibility inventory](docs/gwas_reproducibility.md) lists the analysis scripts, settings, and data schemas needed to make the full study independently reproducible. Standard tools such as BGENIE, PLINK2, and LDSC need not be copied into the repository; exact versioned commands and custom analysis code should be supplied.
+```powershell
+python src/run_single_volume.py --root "data/your_volume_directory"
+```
 
-## Data, citation, and release
+To calculate the CVI phenotypes from the five central B-scans without processing the entire volume for the en face projection:
 
-- UK Biobank and OphtalmoLaus participant-level OCT/genetic data are subject to their respective access and governance conditions. Do not commit real OCT images, masks, participant identifiers, individual phenotypes, or credentials to public GitHub.
-- An openly distributable synthetic example is included for execution and interface testing.
-- The manuscript's source-access and summary-statistics availability statements should be consulted for the GWAS resources.
-- The project's software license and definitive citation metadata must be approved and completed before public release. [`CITATION.cff.example`](CITATION.cff.example) contains a template, not final bibliographic metadata.
+```powershell
+python src/run_single_volume.py --root "data/your_volume_directory" --skip-full-volume
+```
 
-See the [release checklist](docs/reproducibility_checklist.md) for validation and publication steps.
+On a 128-B-scan volume, the default central indices are **62–66** (files `0062.jpg` through `0066.jpg` and matching SVGs). Paths containing spaces must be quoted.
+
+### Outputs
+
+The script prints the volume-level **CVI mean** and **CVI spatial variability**, as well as per-B-scan diagnostics. It also saves:
+
+| Output | Description |
+| --- | --- |
+| `segmentation_debug/` | Vessel masks and OCT overlays for the five central B-scans |
+| `enface_projection.png` | Full-volume en face vessel projection (omitted with `--skip-full-volume`) |
+
+Outputs are written under the input volume directory. The script may also report a legacy connected-component area for compatibility; **it should not be interpreted as a validated vessel-area biomarker**, because the original area calculation includes the background component.
+
+## CVI definitions
+
+For B-scan $i$ and image column $x$, the column-wise vascularity index is
+
+$$
+\mathrm{CVI}_i(x) = \frac{N_{\mathrm{vessel},i}(x)}{N_{\mathrm{choroid},i}(x)},
+$$
+
+where the numerator and denominator are the vessel and choroidal-mask pixel counts within the column. The implementation handles columns without valid choroidal pixels explicitly.
+
+For each B-scan, the mean and standard deviation are computed **across columns**. The final volume-level phenotypes are the medians of those five per-scan statistics:
+
+$$
+\mathrm{CVI}_{\mathrm{mean}} = \operatorname{median}_i\!\left[\operatorname{mean}_x\mathrm{CVI}_i(x)\right],
+\qquad
+\mathrm{CVI}_{\mathrm{spatial\ SD}} = \operatorname{median}_i\!\left[\operatorname{SD}_x\mathrm{CVI}_i(x)\right].
+$$
+
+**CVI spatial variability is not the standard deviation of CVI means between B-scans.** It measures the horizontal variation within each B-scan, followed by median aggregation across the five central scans.
+
+## Reproducibility and scope
+
+The pipeline retains the original image-processing operations and their order. Its settings were designed for the OCT geometry used in the study; applying them to other devices, datasets, or segmentation formats requires technical validation. Before claiming numerical equivalence with the original analysis, compare the resulting masks and CVI values on the same reference OCT volume.
+
+The linked article is a **Research Square preprint (version 1)**. Refer to that version when citing the methods associated with this code.
+
+## Citation
+
+If you use the extraction pipeline, please cite:
+
+> Pittet C, Böttger L, Eandi CM, et al. Genetic Architecture of Choroidal Vascularity Revealed by Population-scale Retinal Imaging. *Research Square*. 2026. https://doi.org/10.21203/rs.3.rs-8842359/v1
