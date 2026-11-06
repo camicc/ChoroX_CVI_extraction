@@ -4,7 +4,9 @@ Automated extraction of choroidal vascularity index (CVI) phenotypes from macula
 
 **Pittet C, et al.** *Genetic Architecture of Choroidal Vascularity Revealed by Population-scale Retinal Imaging*. Research Square, 2026. [https://doi.org/10.21203/rs.3.rs-8842359/v1](https://doi.org/10.21203/rs.3.rs-8842359/v1)
 
-![ChoroX CVI extraction workflow](src/Workflow.png)
+<p align="center">
+  <img src="img/Workflow.png" alt="ChoroX CVI extraction workflow" width="600">
+</p>
 
 ## Overview
 
@@ -23,29 +25,25 @@ The extraction procedure comprises:
 
 The code in this repository focuses on **image processing and phenotype extraction**. The downstream genome-wide association and other genetic analyses reported in the paper are not part of this extraction script.
 
-## Requirements
+## Installation
 
-- Python 3.11 (tested on Windows with Conda)
-- NumPy, SciPy, Pillow, Matplotlib, lxml, and svglib
-- OpenCV
-- ReportLab and a compatible bitmap-rendering backend for rasterizing SVG segmentations
-
-One compatible installation, based on the Windows `cvi-repro` environment, is:
+The tested Python environment is provided in [`environment.yml`](environment.yml). Create it with Conda from the repository root:
 
 ```powershell
-conda create -n cvi-repro python=3.11 -y
+conda env create -f environment.yml
 conda activate cvi-repro
-python -m pip install numpy scipy Pillow matplotlib lxml "svglib>=1.5,<2" "opencv-python-headless==5.0.0.93" "reportlab==4.5.1" "rl-renderPM==4.0.3"
 ```
 
-**Rendering note:** ReportLab 5 no longer supports the legacy `_renderPM` backend. With the versions above, select that backend in `src/processing.py` before rasterizing an SVG:
+The environment was exported from a Windows setup using Python 3.11 and includes packages installed through pip. It records their versions but is not a fully locked, cross-platform environment.
+
+**Rendering note:** The SVG rasterization step uses ReportLab with the `_renderPM` backend. Ensure that `src/processing.py` selects this backend before rasterizing an SVG:
 
 ```python
 from reportlab import rl_config
 rl_config.renderPMBackend = "_renderPM"
 ```
 
-For reproducibility, record the complete package versions used for the final analysis. In particular, changes to the SVG renderer or OpenCV may affect pixel-level segmentations.
+Changes to the SVG renderer or OpenCV may affect pixel-level segmentations; verify the outputs when recreating the environment on a different system.
 
 ## Input data
 
@@ -117,7 +115,9 @@ $$
 
 ## Reproducibility and scope
 
-The pipeline retains the original image-processing operations and their order. Its settings were designed for the OCT geometry used in the study; applying them to other devices, datasets, or segmentation formats requires technical validation. Before claiming numerical equivalence with the original analysis, compare the resulting masks and CVI values on the same reference OCT volume.
+The pipeline retains the original image-processing operations and their order. **Image-processing parameters are acquisition-dependent and may require fine-tuning** for different OCT devices, scan protocols, or image characteristics. The settings used for the **OphtalmoLaus cohort** are provided in [`configs/`](configs/); they should not be assumed to transfer unchanged to other datasets. Parameter choices should be documented and validated against representative scans before cohort-wide extraction.
+
+Before claiming numerical equivalence with the original analysis, compare the resulting masks and CVI values on the same reference OCT volume.
 
 The linked article is a **Research Square preprint (version 1)**. Refer to that version when citing the methods associated with this code.
 
